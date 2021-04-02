@@ -428,6 +428,8 @@ func order(cmd *cobra.Command, args []string) {
         time.Sleep(1000 * time.Millisecond)
     }
 
+    httpServer.Close()
+
     
     fmt.Println("send csr")
     csrReq := `{"csr":"`+ base64.RawURLEncoding.EncodeToString(csr[:])+`"}`
