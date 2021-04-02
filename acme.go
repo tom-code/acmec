@@ -41,20 +41,20 @@ func writeKey(path string, k *ecdsa.PrivateKey) error {
     return f.Close()
 }
 
-func readKey(path string) *ecdsa.PrivateKey {
+func readKey(path string) (*ecdsa.PrivateKey, error) {
     data, err := ioutil.ReadFile(path)
     if err != nil {
-        panic(err)
+        return nil, err
     }
     block, _ := pem.Decode(data)
     if err != nil {
-        panic(err)
+        return nil, err
     }
     key, err := x509.ParseECPrivateKey(block.Bytes)
     if err != nil {
-        panic(err)
+        return nil, err
     }
-    return key    
+    return key, nil
 }
 
 
@@ -64,16 +64,14 @@ type Directory struct {
     NewOrder string
 }
 
-func discover(url string) *Directory {
+func discover(url string) (*Directory, error) {
     resp, err := http.Get(url)
     if err != nil {
-        panic(err)
+        return nil, err
     }
     defer resp.Body.Close()
     if resp.StatusCode != 200 {
-        fmt.Printf("can't get %s\n", url)
-        fmt.Println(resp)
-        return nil
+        return nil, fmt.Errorf("unexpected http status %s", resp.Status)
     }
 
     var js struct {
@@ -88,7 +86,7 @@ func discover(url string) *Directory {
     decoder := json.NewDecoder(resp.Body)
     err = decoder.Decode(&js)
     if err != nil {
-        panic(err)
+        return nil, err
     }
     fmt.Println("acme directory:")
     fmt.Printf("  newAccount: %s\n", js.NewAccount)
@@ -98,7 +96,7 @@ func discover(url string) *Directory {
         NewAccount: js.NewAccount,
         NewNonce: js.NewNonce,
         NewOrder: js.NewOrder,
-    }
+    }, nil
 }
 
 func getNonce(url string) string {
@@ -119,7 +117,7 @@ type Order struct {
 }
 
 
-func parseOrderResponse2(resp *http.Response) *Order {
+func parseOrderResponse2(resp *http.Response) (*Order, error) {
     orderLocation := resp.Header.Get("Location")
     fmt.Printf("order location %s\n", orderLocation)
     var js struct {
@@ -135,7 +133,7 @@ func parseOrderResponse2(resp *http.Response) *Order {
     decoder := json.NewDecoder(resp.Body)
     err := decoder.Decode(&js)
     if err != nil {
-        panic(err)
+        return nil, err
     }
     return &Order {
         Authorizations: js.Authorizations,
@@ -143,7 +141,7 @@ func parseOrderResponse2(resp *http.Response) *Order {
         OrderUrl: orderLocation,
         Status: js.Status,
         Certificate: js.Certificate,
-    }
+    }, nil
 }
 
 type AuthChallenge struct {
@@ -254,7 +252,10 @@ func accCreate(cmd *cobra.Command, args []string) {
     writeKey("account-key.pem", ecKey)
 
     fmt.Println("discovering registry")
-    directory := discover(authorityUrl)
+    directory, err := discover(authorityUrl)
+    if err != nil {
+        panic(err)
+    }
 
     nonce := getNonce(directory.NewNonce)
     fmt.Printf("nonce=%s\n", nonce)
@@ -296,8 +297,10 @@ func order(cmd *cobra.Command, args []string) {
 
     account := string(accountBytes)
     fmt.Printf("account:%s\n", account)
-    ecKey := readKey("account-key.pem")
-
+    ecKey, err := readKey("account-key.pem")
+    if err != nil {
+        panic(err)
+    }
 
     hostname := args[0]
     fmt.Printf("order hostname %s\n", hostname)
@@ -310,7 +313,10 @@ func order(cmd *cobra.Command, args []string) {
     //fmt.Println(csr)
 
     fmt.Println("discovering registry")
-    directory := discover(authorityUrl)
+    directory, err := discover(authorityUrl)
+    if err != nil {
+        panic(err)
+    }
 
     nonce := getNonce(directory.NewNonce)
     fmt.Printf("nonce=%s\n", nonce)
@@ -329,7 +335,10 @@ func order(cmd *cobra.Command, args []string) {
         resp, _ := ioutil.ReadAll(res.Body)
         fmt.Println(string(resp))
     }
-    order := parseOrderResponse2(res)
+    order, err := parseOrderResponse2(res)
+    if err != nil {
+        panic(err)
+    }
     res.Body.Close()
     fmt.Printf("order resp: %s\n", res.Status)
     fmt.Println(order)
@@ -430,11 +439,15 @@ func order(cmd *cobra.Command, args []string) {
         res = postJWS(ecKey, order.OrderUrl, "", nonce, account)
         nonce = res.Header.Get("replay-nonce")
         //path = parseOrderFinal(res)
-        resporder := parseOrderResponse2(res)
-        path = resporder.Certificate
-        fmt.Printf("order response cerificate url:%s\n", path)
-        if len(path) > 3 {
-            break
+        resporder, err := parseOrderResponse2(res)
+        if err != nil {
+            fmt.Println("problem getting cert %s", err.Error())
+        } else {
+            path = resporder.Certificate
+            fmt.Printf("order response cerificate url:%s\n", path)
+            if len(path) > 3 {
+                break
+            }
         }
         time.Sleep(1000 * time.Millisecond)
     }
