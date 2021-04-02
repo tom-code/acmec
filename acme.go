@@ -118,6 +118,7 @@ type Order struct {
 
 
 func parseOrderResponse2(resp *http.Response) (*Order, error) {
+    defer resp.Body.Close()
     orderLocation := resp.Header.Get("Location")
     fmt.Printf("order location %s\n", orderLocation)
     var js struct {
@@ -152,6 +153,7 @@ type AuthChallenge struct {
 }
 
 func parseAuthz(resp *http.Response) *AuthChallenge {
+    defer resp.Body.Close()
     var js struct {
         Status string `json:"status"`
         Challenges []struct {
@@ -407,6 +409,7 @@ func order(cmd *cobra.Command, args []string) {
     // confirm we arranged resource
     res = postJWS(ecKey, challenge.Url, "{}", nonce, account)
     nonce = res.Header.Get("replay-nonce")
+    res.Body.Close()
 
     // give them time to perform authorization
     time.Sleep(100*time.Millisecond)
@@ -416,6 +419,7 @@ func order(cmd *cobra.Command, args []string) {
         res = postJWS(ecKey, order.Authorizations[0], "", nonce, account)
         nonce = res.Header.Get("replay-nonce")
         aresp := parseAuthz(res)
+        res.Body.Close()
         status := aresp.Status
         fmt.Printf("auth url:%s status: %s\n", order.Authorizations[0], status)
         if (res.StatusCode == 200) && (status == "valid") {
@@ -431,6 +435,7 @@ func order(cmd *cobra.Command, args []string) {
     for {
         res = postJWS(ecKey, order.FinalizeUrl, csrReq, nonce, account)
         nonce = res.Header.Get("replay-nonce")
+        res.Body.Close()
         if res.StatusCode == 200 {
             break
         }
@@ -449,6 +454,7 @@ func order(cmd *cobra.Command, args []string) {
         nonce = res.Header.Get("replay-nonce")
         //path = parseOrderFinal(res)
         resporder, err := parseOrderResponse2(res)
+        res.Body.Close()
         if err != nil {
             fmt.Println("problem getting cert %s", err.Error())
         } else {
@@ -466,6 +472,7 @@ func order(cmd *cobra.Command, args []string) {
     chainOut, _ := os.Create(fmt.Sprintf("chain-%s.pem", hostname))
     defer chainOut.Close()
     io.Copy(chainOut, res.Body)
+    res.Body.Close()
 }
 
 
