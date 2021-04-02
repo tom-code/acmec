@@ -489,11 +489,13 @@ func main() {
     accountCreate := &cobra.Command {
         Use: "acc-create",
         Run: accCreate,
+        Short: "create account",
     }
     orderCommand := &cobra.Command {
         Use: "order [hostname]",
         Args: cobra.MinimumNArgs(1),
         Run: order,
+        Short: "make signing order",
     }
 
     rootCmd.AddCommand(accountCreate)
