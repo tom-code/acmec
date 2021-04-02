@@ -238,8 +238,16 @@ func createCSR(key *ecdsa.PrivateKey, host string) []byte {
     return csr
 }
 
+func handleGlobalFlags(cmd *cobra.Command) {
+    insecure, _ := cmd.Flags().GetBool("insecure")
+    if insecure {
+        http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+    }
+}
+
 
 func accCreate(cmd *cobra.Command, args []string) {
+    handleGlobalFlags(cmd)
     authorityUrl, err := cmd.Flags().GetString("authority-url")
     if err != nil {
         panic(err)
@@ -282,6 +290,7 @@ func accCreate(cmd *cobra.Command, args []string) {
 }
 
 func order(cmd *cobra.Command, args []string) {
+    handleGlobalFlags(cmd)
     authorityUrl, err := cmd.Flags().GetString("authority-url")
     if err != nil {
         panic(err)
@@ -460,9 +469,6 @@ func order(cmd *cobra.Command, args []string) {
 }
 
 
-func init() {
-    http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-}
 
 func main() {
 
